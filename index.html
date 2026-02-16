@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Physics Text</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body, html { 
+            width: 100%; 
+            height: 100%; 
+            overflow: hidden; 
+            background: transparent;
+        }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+<script>
+(function() {
+    'use strict';
+    
+    var Engine = Matter.Engine,
+        Render = Matter.Render,
+        Runner = Matter.Runner,
+        Bodies = Matter.Bodies,
+        Composite = Matter.Composite,
+        Events = Matter.Events,
+        Mouse = Matter.Mouse,
+        MouseConstraint = Matter.MouseConstraint;
+
+    var engine = Engine.create();
+    var world = engine.world;
+
+    var width = window.innerWidth;
+    var height = window.innerHeight;
+
+    var render = Render.create({
+        element: document.body,
+        engine: engine,
+        options: {
+            width: width,
+            height: height,
+            background: 'transparent',
+            wireframes: false
+        }
+    });
+
+    var wallThick = 60;
+    var walls = [
+        Bodies.rectangle(width/2, height + wallThick/2, width + 200, wallThick, { isStatic: true, render: { visible: false } }),
+        Bodies.rectangle(-wallThick/2, height/2, wallThick, height * 2, { isStatic: true, render: { visible: false } }),
+        Bodies.rectangle(width + wallThick/2, height/2, wallThick, height * 2, { isStatic: true, render: { visible: false } })
+    ];
+    Composite.add(world, walls);
+
+    var words = ["EXHIBITIONS", "EVENTS", "DESIGNERS", "ARTISTS", "PUBLISHERS", "CITIES", "INSTITUTIONS", "STUDIOS"];
+    
+    function createBlock(text, x, y) {
+        var fontSize = width < 768 ? 16 : 22;
+        var w = text.length * (fontSize * 0.9);
+        var h = fontSize * 2.2;
+        
+        // Keep on screen
+        w = Math.min(w, width * 0.85);
+        x = Math.max(w/2 + 10, Math.min(width - w/2 - 10, x));
+        
+        return Bodies.rectangle(x, y, w, h, {
+            restitution: 0.35,
+            friction: 0.4,
+            density: 0.001,
+            chamfer: { radius: 2 },
+            render: { fillStyle: '#000000' },
+            text: text,
+            fontSize: fontSize
+        });
+    }
+
+    // Drop words
+    words.forEach(function(word, i) {
+        setTimeout(function() {
+            var x = width/2 + (Math.random() - 0.5) * (width * 0.5);
+            var body = createBlock(word, x, -100 - i * 70);
+            Matter.Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.12);
+            Composite.add(world, body);
+        }, i * 180);
+    });
+
+    // Draw text
+    Events.on(render, 'afterRender', function() {
+        var ctx = render.context;
+        var bodies = Composite.allBodies(world);
+        
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ffffff';
+
+        bodies.forEach(function(body) {
+            if (body.text) {
+                ctx.font = 'bold ' + body.fontSize + 'px Arial, sans-serif';
+                ctx.save();
+                ctx.translate(body.position.x, body.position.y);
+                ctx.rotate(body.angle);
+                ctx.fillText(body.text, 0, 0);
+                ctx.restore();
+            }
+        });
+    });
+
+    // Mouse control
+    var mouse = Mouse.create(render.canvas);
+    var mc = MouseConstraint.create(engine, {
+        mouse: mouse,
+        constraint: { stiffness: 0.2, render: { visible: false } }
+    });
+    Composite.add(world, mc);
+    render.mouse = mouse;
+
+    // Click spawn
+    render.canvas.addEventListener('mousedown', function(e) {
+        if (mc.body) return;
+        var rect = render.canvas.getBoundingClientRect();
+        var body = createBlock(
+            words[Math.floor(Math.random() * words.length)],
+            e.clientX - rect.left,
+            e.clientY - rect.top
+        );
+        Matter.Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.2);
+        Composite.add(world, body);
+    });
+
+    // Resize
+    window.addEventListener('resize', function() {
+        render.canvas.width = window.innerWidth;
+        render.canvas.height = window.innerHeight;
+        Matter.Body.setPosition(walls[0], { x: window.innerWidth/2, y: window.innerHeight + wallThick/2 });
+        Matter.Body.setPosition(walls[2], { x: window.innerWidth + wallThick/2, y: window.innerHeight/2 });
+    });
+
+    Render.run(render);
+    Runner.run(Runner.create(), engine);
+})();
+</script>
+</body>
+</html>
