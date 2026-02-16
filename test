@@ -1,0 +1,194 @@
+<div id="physics-container" style="width:100%;height:100vh;position:fixed;top:0;left:0;z-index:9999;pointer-events:none;"></div>
+
+<script>
+(function() {
+    'use strict';
+    
+    // Prevent double initialization
+    if (window.physicsInitialized) return;
+    window.physicsInitialized = true;
+    
+    function loadScript(src, callback) {
+        var script = document.createElement('script');
+        script.src = src;
+        script.onload = callback;
+        script.onerror = function() {
+            console.error('Failed to load Matter.js');
+        };
+        document.head.appendChild(script);
+    }
+    
+    function init() {
+        // Double check container exists
+        var container = document.getElementById('physics-container');
+        if (!container) {
+            console.error('Container not found');
+            return;
+        }
+        
+        // Make sure Matter is loaded
+        if (typeof Matter === 'undefined') {
+            console.error('Matter.js not loaded');
+            return;
+        }
+        
+        var Engine = Matter.Engine,
+            Render = Matter.Render,
+            Runner = Matter.Runner,
+            Bodies = Matter.Bodies,
+            Composite = Matter.Composite,
+            Events = Matter.Events,
+            Mouse = Matter.Mouse,
+            MouseConstraint = Matter.MouseConstraint,
+            Common = Matter.Common;
+
+        var engine = Engine.create();
+        var world = engine.world;
+
+        var render = Render.create({
+            element: container,
+            engine: engine,
+            options: {
+                width: window.innerWidth,
+                height: window.innerHeight,
+                background: 'transparent',
+                wireframes: false
+            }
+        });
+
+        // Force canvas visibility
+        var canvas = render.canvas;
+        canvas.style.pointerEvents = 'auto';
+        canvas.style.position = 'absolute';
+        canvas.style.top = '0';
+        canvas.style.left = '0';
+        
+        // Append canvas directly to body if container fails
+        if (!container.contains(canvas)) {
+            document.body.appendChild(canvas);
+        }
+
+        var wallOptions = { 
+            isStatic: true, 
+            render: { visible: false } 
+        };
+        
+        var ground = Bodies.rectangle(window.innerWidth / 2, window.innerHeight + 50, window.innerWidth, 100, wallOptions);
+        var leftWall = Bodies.rectangle(-50, window.innerHeight / 2, 100, window.innerHeight * 2, wallOptions);
+        var rightWall = Bodies.rectangle(window.innerWidth + 50, window.innerHeight / 2, 100, window.innerHeight * 2, wallOptions);
+
+        Composite.add(world, [ground, leftWall, rightWall]);
+
+        var words = [
+            "EXHIBITIONS", "EVENTS", "DESIGNERS", "ARTISTS", 
+            "PUBLISHERS", "CITIES", "INSTITUTIONS", "STUDIOS"
+        ];
+
+        function createTextBlock(text, x, y) {
+            var charWidth = 22;
+            var width = text.length * charWidth;
+            var height = 50;
+
+            return Bodies.rectangle(x, y, width, height, {
+                restitution: 0.4,
+                friction: 0.3,
+                density: 0.002,
+                chamfer: { radius: 2 },
+                render: { fillStyle: '#000000' },
+                text: text
+            });
+        }
+
+        // Staggered drop
+        var dropIndex = 0;
+        function dropNext() {
+            if (dropIndex >= words.length) return;
+            
+            var word = words[dropIndex];
+            var x = (window.innerWidth / 2) + (Math.random() * 300 - 150);
+            var y = -100;
+            var body = createTextBlock(word, x, y);
+            Matter.Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.2);
+            Composite.add(world, body);
+            
+            dropIndex++;
+            setTimeout(dropNext, 200);
+        }
+        
+        // Start dropping after a short delay
+        setTimeout(dropNext, 500);
+
+        Events.on(render, 'afterRender', function() {
+            var ctx = render.context;
+            var bodies = Composite.allBodies(world);
+            
+            ctx.font = 'bold 24px Arial, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#ffffff';
+
+            for (var i = 0; i < bodies.length; i++) {
+                var body = bodies[i];
+                if (body.text) {
+                    ctx.save();
+                    ctx.translate(body.position.x, body.position.y);
+                    ctx.rotate(body.angle);
+                    ctx.fillText(body.text, 0, 0);
+                    ctx.restore();
+                }
+            }
+        });
+
+        var mouse = Mouse.create(canvas);
+        var mouseConstraint = MouseConstraint.create(engine, {
+            mouse: mouse,
+            constraint: { stiffness: 0.2, render: { visible: false } }
+        });
+
+        Composite.add(world, mouseConstraint);
+        render.mouse = mouse;
+
+        // Click handler
+        canvas.addEventListener('mousedown', function(e) {
+            if (mouseConstraint.body) return;
+            var rect = canvas.getBoundingClientRect();
+            var word = words[Math.floor(Math.random() * words.length)];
+            var body = createTextBlock(word, e.clientX - rect.left, e.clientY - rect.top);
+            Matter.Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.3);
+            Composite.add(world, body);
+        });
+
+        // Resize handler with debounce
+        var resizeTimeout;
+        window.addEventListener('resize', function() {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(function() {
+                render.canvas.width = window.innerWidth;
+                render.canvas.height = window.innerHeight;
+                Matter.Body.setPosition(ground, { x: window.innerWidth / 2, y: window.innerHeight + 50 });
+                Matter.Body.setPosition(rightWall, { x: window.innerWidth + 50, y: window.innerHeight / 2 });
+            }, 100);
+        });
+
+        Render.run(render);
+        var runner = Runner.create();
+        Runner.run(runner, engine);
+        
+        console.log('Physics initialized successfully');
+    }
+
+    // Load Matter.js and initialize
+    if (typeof Matter === 'undefined') {
+        loadScript('https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js', function() {
+            // Wait for DOM ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', init);
+            } else {
+                init();
+            }
+        });
+    } else {
+        init();
+    }
+})();
+</script>
